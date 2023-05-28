@@ -5,6 +5,7 @@ from os.path import exists
 import json
 import os
 import sys,re
+import random
 
 packages.urllib3.disable_warnings()
 from urllib.parse import unquote
@@ -12,10 +13,26 @@ from urllib.parse import unquote
 cron 57 21,9 * * *	
 """
 hadsend=True
+UserAgent=""
 
 def printf(text):
     print(text)
     sys.stdout.flush()
+
+def randomuserAgent():
+    global uuid,addressid,iosVer,iosV,clientVersion,iPhone,area,ADID,lng,lat
+    global UserAgent
+    uuid=''.join(random.sample(['a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z','0','1','2','3','4','5','6','7','8','9','a','b','c','z'], 40))
+    addressid = ''.join(random.sample('1234567898647', 10))
+    iosVer = ''.join(random.sample(["15.1.1","14.5.1", "14.4", "14.3", "14.2", "14.1", "14.0.1"], 1))
+    iosV = iosVer.replace('.', '_')
+    clientVersion=''.join(random.sample(["10.3.0", "10.2.7", "10.2.4"], 1))
+    iPhone = ''.join(random.sample(["8", "9", "10", "11", "12", "13"], 1))
+    area=''.join(random.sample('0123456789', 2)) + '_' + ''.join(random.sample('0123456789', 4)) + '_' + ''.join(random.sample('0123456789', 5)) + '_' + ''.join(random.sample('0123456789', 5))
+    ADID = ''.join(random.sample('0987654321ABCDEF', 8)) + '-' + ''.join(random.sample('0987654321ABCDEF', 4)) + '-' + ''.join(random.sample('0987654321ABCDEF', 4)) + '-' + ''.join(random.sample('0987654321ABCDEF', 4)) + '-' + ''.join(random.sample('0987654321ABCDEF', 12))
+    lng='119.31991256596'+str(random.randint(100,999))
+    lat='26.1187118976'+str(random.randint(100,999))
+    UserAgent=f'jdapp;iPhone;10.0.4;{iosVer};{uuid};network/wifi;ADID/{ADID};model/iPhone{iPhone},1;addressid/{addressid};appBuild/167707;jdSupportDarkMode/0;Mozilla/5.0 (iPhone; CPU iPhone OS {iosV} like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/null;supportJDSHWK/1'
     
 def load_send():
     global send
@@ -34,7 +51,7 @@ def load_send():
         hadsend=False
 load_send()
 
-signurl="https://api.nolanstore.top/sign"
+signurl="https://api.nolanstore.cc/sign"
 if os.environ.get("SIGNURL")!=None:
     if os.environ.get("SIGNURL")!="":
         signurl=os.environ.get("SIGNURL")
@@ -97,7 +114,7 @@ def get_sign_wskey():
         "fn":"genToken",
         "body":{"url": "https://plogin.m.jd.com/jd-mlogin/static/html/appjmp_blank.html"}
     }
-    headers = {"user-agent": "JD4iPhone/167774 (iPhone; iOS 14.6; Scale/2.00)"}
+    headers = {"user-agent": UserAgent}
     try:
         url = signurl
         data = post(url, headers=headers, json=body).json()
@@ -114,7 +131,7 @@ def getcookie_wskey(key):
     url = f"https://api.m.jd.com/client.action?functionId=genToken&{sign}"
     headers = {
         "cookie": key,
-        'user-agent': "JD4iPhone/167774 (iPhone; iOS 14.6; Scale/2.00)",
+        'user-agent': UserAgent,
         'accept-language': 'zh-Hans-CN;q=1, en-CN;q=0.9',
         'content-type': 'application/x-www-form-urlencoded;'
     }
@@ -149,30 +166,13 @@ def getcookie_wskey(key):
         return "Error"
 
 
-def subcookie(pt_pin, cookie, token ,envtype):
-    if envtype=="v4":
-        sh = "/jd/config/config.sh"
-        with open(sh, "r", encoding="utf-8") as read:
-            configs = read.readlines()
-        cknums = []
-        for config in configs:
-            cknum = findall(r'(?<=Cookie)[\d]+(?==")', config)
-            if cknum != []:
-                m = configs.index(config)
-                cknums.append(cknum[0])
-                if pt_pin in config:
-                    configs[m] = f'Cookie{cknum[0]}="{cookie}"\n'
-                    printf(f"更新cookie成功！pt_pin：{pt_pin}")
-                    break
-            elif "第二区域" in config:
-                newcknum = int(cknums[-1]) + 1
-                configs.insert(m + 1, f'Cookie{newcknum}="{cookie}"\n')
-                printf(f"新增cookie成功！pt_pin：{pt_pin}")
-                break
-        with open(sh, "w", encoding="utf-8") as write:
-            write.write("".join(configs))
-    else:        
+def subcookie(pt_pin, cookie, token):
+    if True:
+        reamrk=""
         if token!="":
+            strptpin=pt_pin
+            if re.search('%', strptpin):
+                strptpin = unquote(strptpin, 'utf-8')
             url = 'http://127.0.0.1:5600/api/envs'
             headers = {'Authorization': f'Bearer {token}'}
             body = {
@@ -190,7 +190,14 @@ def subcookie(pt_pin, cookie, token ,envtype):
                         body = {"name": "JD_COOKIE", "value": cookie, "id": data['id']}
                         isline=False
                     old = True
-                    break
+                    try:
+                        reamrk=data['remarks']
+                    except:
+                        reamrk=""
+
+                    if reamrk!="" and not reamrk is None:
+                        strptpin=strptpin+"("+reamrk.split("@@")[0]+")"
+                        
             if old:
                 put(url, json=body, headers=headers)
                 url = 'http://127.0.0.1:5600/api/envs/enable'
@@ -199,30 +206,47 @@ def subcookie(pt_pin, cookie, token ,envtype):
                 else:
                     body = [body['id']]
                 put(url, json=body, headers=headers)
-                printf(f"更新并启用cookie成功！pt_pin：{pt_pin}")
+                printf(f"更新成功：{strptpin}")
             else:
                 body = [{"value": cookie, "name": "JD_COOKIE"}]
                 post(url, json=body, headers=headers)
-                printf(f"新增cookie成功！pt_pin：{pt_pin}")
+                printf(f"新增成功：{strptpin}")
+
+def getRemark(pt_pin,token):
+    strreturn=pt_pin
+    reamrk=""
+    if token!="":
+        url = 'http://127.0.0.1:5600/api/envs'
+        headers = {'Authorization': f'Bearer {token}'}
+        body = {
+            'searchValue': pt_pin,
+            'Authorization': f'Bearer {token}'
+        }
+        datas = get(url, params=body, headers=headers).json()['data']
+        for data in datas:
+            if "pt_key" in data['value']:
+                try:
+                    reamrk=data['remarks']
+                    break
+                except:
+                    pass
+        if not reamrk is None and reamrk!="":
+            strreturn=strreturn+"("+reamrk.split("@@")[0]+")"
+
+    return strreturn
 
 def main():
-    printf("版本: 20230524")
+    printf("版本: 20230527V2")
     printf("说明: 如果用Wxpusher通知需配置WP_APP_TOKEN_ONE和WP_APP_MAIN_UID，其中WP_APP_MAIN_UID是你的Wxpusher UID")
     printf("====================================")
-    envtype=""
     config=""
     iswxpusher=False
+    counttime=0
     if os.path.exists("/ql/config/auth.json"):
-        envtype="ql"
         config="/ql/config/auth.json"
     
     if os.path.exists("/ql/data/config/auth.json"):
         config="/ql/data/config/auth.json"
-        envtype="newql"
-        
-    if os.path.exists("/jd/config/config.sh"):
-        config="/jd/config/config.sh"
-        envtype="v4" 
         
     if config=="":
         printf(f"无法判断使用环境，退出脚本!")
@@ -240,7 +264,6 @@ def main():
     except:
         iswxpusher=False
 
-    printf("\n===============开始转换JD_WSCK==============")
     resurt=""
     resurt1=""
     resurt2=""
@@ -255,12 +278,19 @@ def main():
         'Authorization': f'Bearer {token}'
     }
     datas = get(url, params=body, headers=headers).json()['data']
+    if len(datas)>0:
+        printf("\n===============开始转换JD_WSCK==============")
+    else:
+        printf("\n错误:没有需要转换的JD_WSCK，退出脚本!")
+        return
+    
     for data in datas:
+        randomuserAgent()
         if data['status']!=0:
             continue
         key = data['value']
         pin = key.split(";")[0].split("=")[1]
-        newpin=pin
+        newpin=getRemark(pin,token)
         cookie = getcookie_wskey(key)
         
         if re.search('%', pin):
@@ -269,8 +299,8 @@ def main():
         if "app_open" in cookie:
             #printf("转换成功:"cookie)     
             orgpin = cookie.split(";")[1].split("=")[1]            
-            subcookie(orgpin, cookie, token, envtype)
-            resurt1=resurt1+f"pt_pin更新成功：{newpin}\n"
+            subcookie(orgpin, cookie, token)
+            resurt1=resurt1+f"转换成功：{newpin}\n"
         else:            
             if "fake_" in cookie:
                 message = f"pin为{newpin}的wskey过期了！"
@@ -281,11 +311,11 @@ def main():
                 except:   
                     body = [data['id']]
                 put(url, json=body, headers=headers)                
-                printf(f"pin为{newpin}的wskey已禁用")
-                resurt2=resurt2+f"pin为{newpin}的wskey已禁用\n"
+                printf(f"禁用成功:{newpin}")
+                resurt2=resurt2+f"wskey已禁用:{newpin}\n"
             else:
-                message = f"pin为{newpin}的wskey转换失败！"
-                resurt2=resurt2+f"pin为{newpin}的wskey转换失败！\n"
+                message = f"转换失败:{newpin}"
+                resurt2=resurt2+f"转换失败:{newpin}\n"
 
                
     if resurt2!="": 
@@ -304,6 +334,12 @@ def main():
                 send("JD_WSCK转换结果",resurt)
             else:
                 printf("没有启用通知!")
+    else:
+        if resurt1!="": 
+            resurt=resurt+"👇👇👇👇👇转换成功👇👇👇👇👇\n"+resurt1
 
-if __name__ == '__main__':
+    printf("\n\n===============转换结果==============\n")
+    printf(resurt)
+
+if __name__ == '__main__':    
     main()
