@@ -5,7 +5,7 @@ from os.path import exists
 import json
 import os
 import sys,re
-import random
+import random,time
 
 packages.urllib3.disable_warnings()
 from urllib.parse import unquote
@@ -119,27 +119,40 @@ def get_sign_wskey():
         url = signurl
         data = post(url, headers=headers, json=body).json()
         sign = data['body']
+        
     except Exception as error:
-        print(f"【错误】获取sign、body时：\n{error}\n将使用固定sign、body进行获取cookie")
+        printf(f"【错误】获取sign、body时：\n{error}\n将使用固定sign、body进行获取cookie")
         sign = "client=apple&clientVersion=10.0.10&uuid=a1e779b4f56e4fd3b51af4b1d3ca3f13&st=1635391223795&sign=a1d6386f9455999594208ba36541ffda&sv=120"
     return sign
 
 def getcookie_wskey(key):
     body = "body=%7B%22to%22%3A%22https%3A//plogin.m.jd.com/jd-mlogin/static/html/appjmp_blank.html%22%7D"
     pin = findall("pin=([^;]*);", key)[0]
-    sign = get_sign_wskey()
-    url = f"https://api.m.jd.com/client.action?functionId=genToken&{sign}"
-    headers = {
-        "cookie": key,
-        'user-agent': UserAgent,
-        'accept-language': 'zh-Hans-CN;q=1, en-CN;q=0.9',
-        'content-type': 'application/x-www-form-urlencoded;'
-    }
-    try:
-        token = post(url=url, headers=headers, data=body, verify=False).json()['tokenKey']
-    except Exception as error:
-        print(f"【错误】{unquote(pin)}在获取token时：\n{error}")
-        return pin, "False"
+    
+    for num in range(0,20):
+        sign = get_sign_wskey()
+        url = f"https://api.m.jd.com/client.action?functionId=genToken&{sign}"
+        headers = {
+            "cookie": key,
+            'user-agent': UserAgent,
+            'accept-language': 'zh-Hans-CN;q=1, en-CN;q=0.9',
+            'content-type': 'application/x-www-form-urlencoded;'
+        }
+        try:
+            token = post(url=url, headers=headers, data=body, verify=False).json()
+            token=token['tokenKey']
+        except Exception as error:
+            printf(f"【错误】{unquote(pin)}在获取token时：\n{error}")
+            return pin, "False"
+        if token!="xxx":
+            break
+        else:
+            printf(f"【警告】{unquote(pin)}在获取token时失败，等待5秒后重试")
+            time.sleep(5)
+            
+    if token=="xxx":
+        printf(f"【错误】{unquote(pin)}在获取token时失败，跳过")
+        return "Error"
     url = 'https://un.m.jd.com/cgi-bin/app/appjmp'
     params = {
         'tokenKey': token,
@@ -152,7 +165,7 @@ def getcookie_wskey(key):
         res = get(url=url, params=params, verify=False,
                   allow_redirects=False).cookies.get_dict()        
     except Exception as error:
-        print(f"【错误】{unquote(pin)}在获取cookie时：\n{error}")
+        printf(f"【错误】{unquote(pin)}在获取cookie时：\n{error}")
         return "Error"
         
     try:
@@ -162,7 +175,7 @@ def getcookie_wskey(key):
         else:        
             return ("Error:"+str(res))
     except Exception as error:
-        print(f"【错误】{unquote(pin)}在获取cookie时：\n{str(res)}")
+        printf(f"【错误】{unquote(pin)}在获取cookie时：\n{str(res)}")
         return "Error"
 
 
@@ -212,9 +225,13 @@ def subcookie(pt_pin, cookie, token):
                 post(url, json=body, headers=headers)
                 printf(f"新增成功：{strptpin}")
 
-def getRemark(pt_pin,token):
-    strreturn=pt_pin
+def getRemark(pt_pin,token):    
     reamrk=""
+    if re.search('%', pt_pin):
+        strreturn=unquote(pt_pin, 'utf-8')
+    else:
+        strreturn=pt_pin
+
     if token!="":
         url = 'http://127.0.0.1:5600/api/envs'
         headers = {'Authorization': f'Bearer {token}'}
@@ -236,7 +253,7 @@ def getRemark(pt_pin,token):
     return strreturn
 
 def main():
-    printf("版本: 20230527V2")
+    printf("版本: 20230601")
     printf("说明: 如果用Wxpusher通知需配置WP_APP_TOKEN_ONE和WP_APP_MAIN_UID，其中WP_APP_MAIN_UID是你的Wxpusher UID")
     printf("====================================")
     config=""
@@ -289,19 +306,17 @@ def main():
         if data['status']!=0:
             continue
         key = data['value']
-        pin = key.split(";")[0].split("=")[1]
-        newpin=getRemark(pin,token)
+        pin = re.findall(r'(pin=([^; ]+)(?=;?))',key)[0][1]        
         cookie = getcookie_wskey(key)
-        
-        if re.search('%', pin):
-            newpin = unquote(pin, 'utf-8')
-            
+
         if "app_open" in cookie:
             #printf("转换成功:"cookie)     
             orgpin = cookie.split(";")[1].split("=")[1]            
             subcookie(orgpin, cookie, token)
+            newpin=getRemark(orgpin,token)
             resurt1=resurt1+f"转换成功：{newpin}\n"
-        else:            
+        else:
+            newpin=getRemark(pin,token)
             if "fake_" in cookie:
                 message = f"pin为{newpin}的wskey过期了！"
                 printf(message)
